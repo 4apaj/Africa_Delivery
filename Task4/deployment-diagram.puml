@@ -1,0 +1,83 @@
+@startuml deployment-diagram
+title Africa Delivery - Deployment (Год 1). ПДн не покидают страну
+skinparam defaultFontName Arial
+skinparam node {
+  BackgroundColor<<pii>> #FFF4E5
+  BackgroundColor<<nopii>> #E8F1FB
+}
+
+node "Android / iOS" as phone {
+  artifact "Приложение\n(офлайн-кеш, очередь запросов)" as appart
+}
+
+cloud "CDN (PoP Лагос / Найроби / Йоханнесбург)\nбез ПДн" <<nopii>> as cdn
+
+node "Нигерия - Лагос" <<pii>> as ng {
+  node "ЦОД-1 (оператор A, Tier III+)" as ngdc1 {
+    node "K8s worker ×3\n(разные стойки и фидеры)" as ngk1 {
+      artifact "api (catalog-read)\nHPA" as ng_read
+      artifact "api (checkout)\nHPA" as ng_chk
+      artifact "workers outbox" as ng_wrk
+      artifact "Valkey" as ng_val
+      artifact "OTel / Prometheus / Loki" as ng_obs
+    }
+    database "PostgreSQL primary\n+ async replica" as ng_pg1
+    node "Vault ×2 (Raft)" as ng_v1
+  }
+  node "ЦОД-2 (оператор B)" as ngdc2 {
+    database "PostgreSQL\nсинхронная реплика" as ng_pg2
+    node "Vault ×1 (Raft)" as ng_v2
+    database "MinIO: WAL-архив,\nбэкапы, KYC-реплика" as ng_minio
+    node "K8s cold (1 нода)\n+ IaC для расширения" as ng_cold
+  }
+}
+
+node "Кения - Найроби (тот же шаблон ячейки)" <<pii>> as ke {
+  node "ЦОД-1 (оператор C)" as kedc1 {
+    artifact "api + workers + Valkey" as ke_app
+    database "PostgreSQL primary" as ke_pg1
+  }
+  node "ЦОД-2 (оператор D)" as kedc2 {
+    database "PostgreSQL sync replica\n+ MinIO + Vault" as ke_pg2
+  }
+}
+
+node "AWS af-south-1 (Кейптаун) - без ПДн" <<nopii>> as aws {
+  node "AZ-a / AZ-b" as awsaz {
+    artifact "EKS: Grafana + OnCall,\nArgoCD, экспорт-приёмник" as g_eks
+    database "S3: изображения (origin CDN),\nреестр образов" as g_s3
+    database "RDS PostgreSQL:\nагрегаты k ≥ 10" as g_rds
+  }
+}
+
+node "Партнёры" as ext {
+  component "Flutterwave / Paystack / M-Pesa" as psp
+  component "Sendbox / Sendy" as lg
+  component "WhatsApp BSP / SMS-USSD" as msg
+}
+
+appart --> cdn : HTTPS (каталог)
+appart --> ng_chk : HTTPS (заказ, ПДн NG)
+appart --> ke_app : HTTPS (заказ, ПДн KE)
+cdn --> ng_read : промах кеша
+cdn --> g_s3 : изображения
+ng_chk --> ng_pg1 : SQL
+ng_pg1 --> ng_pg2 : синхронная репликация\n(RTT 1–3 мс)
+ng_pg2 --> ng_minio : WAL-архив
+ng_v1 -- ng_v2 : Raft
+ng_wrk --> psp : HTTPS
+ng_wrk --> lg : HTTPS
+ng_wrk --> msg : HTTPS
+ng_wrk --> g_rds : агрегаты (PUBLIC)
+ke_pg1 --> ke_pg2 : синхронная репликация
+ke_app --> g_rds : агрегаты (PUBLIC)
+ng_obs --> g_eks : метрики без ПДн
+g_eks --> ng_chk : GitOps
+g_eks --> ke_app : GitOps
+ng_cold ..> ng_chk : резерв при потере ЦОД-1\n(failover-plan, сценарий 3)
+
+note bottom of aws
+  Запрещено политикой: бэкапы, реплики и DR
+  ячеек NG/KE в AWS или любой другой стране
+end note
+@enduml

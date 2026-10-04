@@ -1,0 +1,76 @@
+@startuml c4-container
+!include <C4/C4_Container>
+
+LAYOUT_TOP_DOWN()
+title Africa Delivery — C4 Container (сгруппировано по регионам развёртывания, Год 1)
+
+Person(buyer, "Покупатель", "Android/iOS, 3G; USSD/SMS")
+Person(seller, "Продавец МСБ", "WhatsApp")
+Person(ops, "Оператор бэк-офиса", "Страна ячейки")
+Person(exec, "Руководство", "Дашборд запуска")
+
+Container(app, "Мобильное приложение", "Flutter / Kotlin", "Каталог с офлайн-кешем, заказ, отслеживание. Ключ идемпотентности")
+
+System_Boundary(edge, "Edge: CDN (PoP Лагос, Найроби, Йоханнесбург) — без ПДн") {
+  Container(cdn, "CDN", "HTTP-кеш", "Изображения (immutable), карточки 60 с, stale-if-error 24 ч")
+}
+
+Boundary(ng, "Нигерия — ячейка cell-ng (Лагос, локальные провайдеры, ЦОД-1 + ЦОД-2) — ПДн NG") {
+  Container(ng_api, "Africa Delivery API", "Go, модульный монолит", "Каталог, заказ, оплата, доставка, уведомления, продавцы, согласия, бэк-офис API")
+  Container(ng_workers, "Воркеры outbox", "Go, тот же бинарник", "Уведомления, отправления, callback PSP, экспорт агрегатов")
+  Container(ng_admin, "Бэк-офис", "OSS-конструктор админок", "KYC, модерация, возвраты, снятие контента")
+  Container(ng_vault, "Tokenization Vault / KMS", "HashiCorp Vault", "Токены ПДн, ключи pii / pay / kyc")
+  ContainerDb(ng_db, "PostgreSQL", "CloudNativePG, синхронная реплика в ЦОД-2", "Профили, адреса, заказы, платежи, согласия")
+  ContainerDb(ng_cache, "Valkey", "In-memory", "Карточки 5 мин, статусы USSD 30 с, ключи идемпотентности")
+  ContainerDb(ng_s3, "MinIO", "S3 API", "Документы KYC, WAL-архив, бэкапы, копия изображений")
+  Container(ng_obs, "Observability", "OTel Collector, Prometheus, Loki, Tempo", "Маскирование ПДн до записи")
+}
+
+Boundary(ke, "Кения — ячейка cell-ke (Найроби, локальные провайдеры) — ПДн KE, тот же деплой") {
+  Container(ke_api, "Africa Delivery API + воркеры", "Go", "Идентичен NG; платёжные данные — без исключений в стране")
+  ContainerDb(ke_db, "PostgreSQL + Vault + MinIO + Valkey", "Как в NG", "ПДн и платёжные данные Кении")
+}
+
+Boundary(glob, "Глобальный слой — AWS af-south-1 (Кейптаун), 2 AZ — БЕЗ ПДн") {
+  ContainerDb(g_s3, "Изображения товаров", "S3", "Origin для CDN")
+  ContainerDb(g_an, "Аналитика агрегатов", "PostgreSQL (RDS)", "Заказы, GMV, конверсия по стране и дню, k ≥ 10")
+  Container(g_graf, "Grafana + OnCall", "OSS", "SLO, дашборд запуска, эскалации; запросы в ячейки без хранения ПДн")
+  Container(g_ci, "CI/CD и реестр образов", "GitHub Actions, ArgoCD, OCI registry", "Подписанные образы, GitOps для всех ячеек")
+}
+
+System_Ext(psp_ng, "Flutterwave / Paystack", "PSP Нигерии")
+System_Ext(psp_ke, "M-Pesa Daraja / Flutterwave", "PSP Кении")
+System_Ext(log_ng, "Sendbox", "Логистика NG")
+System_Ext(log_ke, "Sendy", "Логистика KE")
+System_Ext(wa, "WhatsApp Business API", "BSP")
+System_Ext(sms, "SMS/USSD-шлюз", "Агрегатор")
+
+Rel(buyer, app, "Пользуется")
+Rel(app, cdn, "Каталог, изображения", "HTTPS")
+Rel(cdn, ng_api, "Промах кеша: публичный каталог", "HTTPS")
+Rel(cdn, g_s3, "Промах кеша: изображения", "HTTPS")
+Rel(app, ng_api, "Заказ, профиль (ПДн) — напрямую в ячейку страны", "HTTPS, JWT")
+Rel(app, ke_api, "Заказ, профиль (KE)", "HTTPS")
+Rel(ops, ng_admin, "KYC, модерация, возвраты", "HTTPS")
+Rel(ng_admin, ng_api, "Вызывает", "HTTPS")
+Rel(ng_api, ng_vault, "Токенизирует и расшифровывает ПДн", "HTTPS")
+Rel(ng_api, ng_db, "Читает и пишет; outbox в той же транзакции", "SQL")
+Rel(ng_api, ng_cache, "Cache-Aside", "RESP")
+Rel(ng_workers, ng_db, "Читает outbox", "SQL")
+Rel(ng_workers, psp_ng, "Инициирует платежи, сверка", "HTTPS")
+Rel(psp_ng, ng_api, "Webhooks об оплате", "HTTPS")
+Rel(ng_workers, log_ng, "Создаёт отправления", "HTTPS")
+Rel(ng_workers, wa, "Уведомления (номер заказа + статус)", "HTTPS")
+Rel(ng_workers, sms, "SMS по opt-in, USSD-меню", "HTTPS")
+Rel(seller, wa, "Команды продавца")
+Rel(ng_db, ng_s3, "WAL-архив, бэкапы (только в Нигерии)", "S3 API")
+Rel(ng_workers, g_an, "Экспорт агрегатов k ≥ 10 (класс PUBLIC)", "HTTPS")
+Rel(ke_api, psp_ke, "Платежи", "HTTPS")
+Rel(ke_api, log_ke, "Отправления", "HTTPS")
+Rel(ke_api, g_an, "Агрегаты", "HTTPS")
+Rel(ng_obs, g_graf, "Метрики без ПДн", "PromQL")
+Rel(exec, g_graf, "Дашборд, обновление раз в 1 мин", "HTTPS")
+Rel(g_ci, ng_api, "GitOps-деплой", "ArgoCD")
+
+SHOW_LEGEND()
+@enduml

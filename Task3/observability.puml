@@ -1,0 +1,57 @@
+@startuml observability
+title Africa Delivery — схема сбора телеметрии (одна страновая ячейка, NG или KE)
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam rectangle {
+  BackgroundColor<<pii>> #FFF4E5
+  BackgroundColor<<global>> #E8F1FB
+}
+left to right direction
+
+actor "Покупатель\n(Android, 3G)" as user
+actor "Дежурный\nинженер" as oncall
+actor "Инвестор / CEO\n(дашборд запуска)" as exec
+
+node "Мобильное приложение" as app {
+  [OTel mobile SDK\n(RUM: время до первого товара,\nошибки, crash)] as rum
+}
+
+rectangle "Страновая ячейка: Kubernetes (Certified)" <<pii>> as cell {
+  [Модульный монолит (Go)\nOTel SDK: метрики RED,\nJSON-логи с trace_id,\nспаны, бизнес-метрики] as mono
+  [Воркеры outbox:\nуведомления, логистика,\nплатёжные callback] as workers
+  [OTel Collector agent\n(DaemonSet):\nмаскирование ПДн,\ntail sampling] as agent
+  [Prometheus\n(15 дней, recording rules SLI)] as prom
+  [Loki\n(логи, 14 дней, S3 ячейки)] as loki
+  [Tempo\n(трассы, 7 дней, S3 ячейки)] as tempo
+  [Blackbox exporter\n(синтетика API, USSD, PSP)] as bb
+  [Alertmanager\n(burn rate)] as am
+}
+
+cloud "Внешние источники" {
+  [CDN: логи edge] as cdn
+  [PSP / Sendbox / Sendy /\nBSP / SMS: webhooks и DLR] as partners
+}
+
+rectangle "Глобальный контур (без ПДн)" <<global>> as global {
+  [Grafana\n(дашборды SLO,\nзолотые сигналы,\nдашборд запуска)] as grafana
+  [Grafana OnCall OSS\n(эскалация: SMS, Telegram)] as oc
+}
+
+user --> rum : использует
+rum --> agent : OTLP/HTTP (батчи,\nотправка при наличии сети)
+mono --> agent : OTLP (метрики,\nлоги, трассы)
+workers --> agent : OTLP
+partners --> mono : webhooks →\nметрики партнёров
+cdn --> loki : экспорт логов\n(без ПДн)
+agent --> prom : remote write
+agent --> loki : логи (ПДн замаскированы)
+agent --> tempo : спаны (100 % ошибок,\n5 % успешных)
+bb --> prom : пробы раз в 30 с
+prom --> am : алерты по SLO
+am --> oc : page / ticket
+oc --> oncall : вызов + runbook
+grafana --> prom : PromQL (только агрегаты)
+grafana --> loki : запросы по trace_id
+grafana --> tempo : трасса по trace_id
+exec --> grafana : обновление раз в 1 мин
+@enduml

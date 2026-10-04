@@ -1,0 +1,57 @@
+@startuml transition-architecture
+title Africa Delivery - Transition Architecture: сейчас → MVP → 12 месяцев
+skinparam defaultFontName Arial
+skinparam rectangle {
+  RoundCorner 6
+}
+skinparam rectangle<<new>> {
+  BackgroundColor #E3F4EA
+  BorderColor #0B7A4B
+}
+skinparam rectangle<<same>> {
+  BackgroundColor #F5F5F5
+  BorderColor #888888
+}
+skinparam rectangle<<ext>> {
+  BackgroundColor #E8F1FB
+  BorderColor #1F5FA8
+}
+left to right direction
+
+rectangle "СЕЙЧАС (август 2026)" as now {
+  rectangle "Нет системы (greenfield)\n29 функций A4, письмо CTO A5,\nTCO, ADR-001…004" <<same>> as n1
+  rectangle "Договоры: PSP, Sendbox, Sendy,\nBSP, SMS; закупка ЦОД" <<ext>> as n2
+}
+
+rectangle "MVP (15.10.2026)" as mvp {
+  rectangle "Шаблон ячейки v1 (NG, KE):\nCertified K8s · ArgoCD · Vault ·\nCloudNativePG · MinIO · Valkey · OTel" <<new>> as m1
+  rectangle "Модульный монолит (Go), 1 бинарник,\n2 deployment: catalog-read | checkout\nмодули: catalog, order, payment, payout,\ndelivery, notification, seller, consent, identity" <<new>> as m2
+  rectangle "Порты-адаптеры: payment (Daraja, Flutterwave,\nPaystack) · delivery (Sendbox, Sendy) ·\nnotification (BSP, SMS, FCM)" <<new>> as m3
+  rectangle "Outbox + NATS JetStream (события)" <<new>> as m4
+  rectangle "Глобальный слой без ПДн (AWS):\nS3 изображений, агрегаты, Grafana" <<new>> as m5
+}
+
+rectangle "12 МЕСЯЦЕВ (август 2027)" as y1 {
+  rectangle "Шаблон ячейки v2 ×5 (NG, KE, ZA, GH, CI)\n+ warm standby NG/KE (99,95 %)" <<new>> as y1a
+  rectangle "Тот же монолит; модули добавлены:\nb2b, seller-insights, returns, ussd-order" <<same>> as y1b
+  rectangle "Вынесен 1-й сервис: search + OpenSearch\n(триггер ADR-002: 5 языков). Остальное -\nв монолите: MAU < 1,5 млн (триггер ADR-001)" <<new>> as y1c
+  rectangle "Новые адаптеры за теми же портами:\nKYC (Smile ID), BNPL-партнёр, ML-антифрод" <<ext>> as y1d
+  rectangle "Брокер с Kafka API - только если\n> 500 событий/с (иначе NATS)" <<same>> as y1e
+  rectangle "Экспорт псевдонимизированных данных -\nвыключатель политики после юриста (ADR-003)" <<same>> as y1f
+}
+
+n1 --> m2 : ADR-001
+n2 --> m3 : Partner (ADR-004)
+m1 --> y1a : тот же шаблон,\nновая страна = конфигурация
+m2 --> y1b : добавление модулей,\nне переписывание
+m2 --> y1c : вынос по границе модуля\n(интерфейс + события уже есть)
+m3 --> y1d : новый адаптер за портом
+m4 --> y1e : смена транспорта событий\n(контракт событий не меняется)
+m5 --> y1f : политика как код
+
+legend right
+  |<#E3F4EA>| создаётся на этом шаге |
+  |<#F5F5F5>| существующее, расширяется |
+  |<#E8F1FB>| внешние партнёры / Buy |
+endlegend
+@enduml

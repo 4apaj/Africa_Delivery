@@ -1,0 +1,40 @@
+@startuml c4-context
+!include <C4/C4_Context>
+
+LAYOUT_TOP_DOWN()
+title Africa Delivery — C4 System Context (MVP, запуск 15.10.2026)
+
+Person(buyer, "Покупатель", "Смартфон Android < $150, 3G/4G; Лагос, Абуджа, Найроби, Момбаса")
+Person(buyer_ussd, "Покупатель без интернета", "Кнопочный телефон: USSD и SMS")
+Person(seller, "Продавец МСБ", "Работает через WhatsApp или USSD, без веб-кабинета")
+Person(ops, "Оператор бэк-офиса", "KYC продавцов, модерация, возвраты, споры")
+Person(exec, "Руководство", "Инвестор, CEO, CFO: дашборд запуска")
+
+System(ad, "Africa Delivery Platform", "Модульный монолит на Go: каталог, заказ, оплата, доставка, уведомления, согласия. Страновые ячейки NG / KE (ADR-001)")
+
+System_Ext(mpesa, "M-Pesa (Safaricom Daraja)", "Мобильные платежи, Кения")
+System_Ext(flutter, "Flutterwave", "Карты, банковские переводы, мобильные деньги")
+System_Ext(paystack, "Paystack", "Карты и переводы, Нигерия (резервный PSP)")
+System_Ext(sendbox, "Sendbox API", "Курьерская доставка, Нигерия")
+System_Ext(sendy, "Sendy API", "Курьерская доставка, Кения")
+System_Ext(wa, "WhatsApp Business API (через BSP)", "Канал продавцов и уведомлений")
+System_Ext(sms, "SMS/USSD-шлюз (агрегатор)", "Короткий номер, USSD-код, SMS")
+System_Ext(stores, "App Store / Google Play", "Дистрибуция приложения, диплинки")
+
+Rel(buyer, ad, "Ищет товары, оформляет и отслеживает заказ", "HTTPS, мобильное приложение")
+Rel(buyer_ussd, sms, "Проверяет статус, подтверждает получение", "USSD-сессия / SMS")
+Rel(seller, wa, "Добавляет товары, подтверждает заказы", "Сообщения WhatsApp")
+Rel(ops, ad, "Проверяет продавцов, модерирует, оформляет возвраты", "HTTPS, админка")
+Rel(exec, ad, "Смотрит регистрации, заказы и выручку раз в минуту", "HTTPS, дашборд")
+
+Rel(ad, mpesa, "Инициирует STK Push, получает callback об оплате; выплачивает продавцам (B2C)", "HTTPS REST")
+Rel(ad, flutter, "Создаёт платёж, получает webhook, делает возврат", "HTTPS REST")
+Rel(ad, paystack, "Резервная маршрутизация платежей по стоимости", "HTTPS REST")
+Rel(ad, sendbox, "Создаёт отправление, получает статусы доставки (NG)", "HTTPS REST + webhook")
+Rel(ad, sendy, "Создаёт отправление, получает статусы доставки (KE)", "HTTPS REST + webhook")
+Rel(ad, wa, "Шаблонные уведомления; принимает команды продавцов", "Cloud API + webhook")
+Rel(ad, sms, "Отправляет SMS (только opt-in); обрабатывает USSD-меню", "HTTPS REST + callback")
+Rel(buyer, stores, "Устанавливает приложение по ссылке из рекламы", "HTTPS")
+
+SHOW_LEGEND()
+@enduml

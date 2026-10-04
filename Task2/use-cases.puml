@@ -1,0 +1,74 @@
+@startuml use-cases
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+title Africa Delivery - ключевые сценарии MVP (15.10.2026)
+
+actor "Покупатель" as Buyer
+actor "Покупатель\n(USSD/SMS)" as UssdBuyer
+actor "Продавец МСБ\n(WhatsApp/USSD)" as Seller
+actor "Оператор\nбэк-офиса" as Ops
+actor "Руководство" as Exec
+
+actor "PSP:\nM-Pesa / Flutterwave /\nPaystack" as PSP <<system>>
+actor "Логистика:\nSendbox / Sendy" as Logistics <<system>>
+actor "WhatsApp / SMS /\nUSSD-шлюз" as Messaging <<system>>
+
+rectangle "Africa Delivery Platform" {
+  usecase "UC1 Регистрация\nи согласия (opt-in)" as UC1
+  usecase "UC2 Поиск и просмотр\nкаталога (офлайн-кеш)" as UC2
+  usecase "UC3 Оформление заказа" as UC3
+  usecase "UC4 Оплата\n(M-Pesa / карта / перевод)" as UC4
+  usecase "UC5 Наличные курьеру\n(только Лагос, Найроби)" as UC5
+  usecase "UC6 Отслеживание\nзаказа" as UC6
+  usecase "UC7 Подтверждение\nполучения" as UC7
+  usecase "UC8 Заявка на возврат\n(кредит на баланс)" as UC8
+  usecase "UC9 Онбординг продавца\nчерез WhatsApp" as UC9
+  usecase "UC10 Добавление товара\nи остатков" as UC10
+  usecase "UC11 Подтверждение\nи сборка заказа" as UC11
+  usecase "UC12 Выплата продавцу\nв день доставки" as UC12
+  usecase "UC13 KYC продавца\nи модерация карточек" as UC13
+  usecase "UC14 Обработка возврата\nи спора" as UC14
+  usecase "UC15 Дашборд запуска\n(обновление раз в минуту)" as UC15
+  usecase "Уведомить\n(SMS / WhatsApp / push)" as NOTIFY
+}
+
+Buyer --> UC1
+Buyer --> UC2
+Buyer --> UC3
+Buyer --> UC6
+Buyer --> UC8
+UssdBuyer --> UC6
+UssdBuyer --> UC7
+Seller --> UC9
+Seller --> UC10
+Seller --> UC11
+Ops --> UC13
+Ops --> UC14
+Exec --> UC15
+
+UC3 ..> UC4 : <<include>>
+UC5 ..> UC3 : <<extend>>
+UC3 ..> NOTIFY : <<include>>
+UC11 ..> NOTIFY : <<include>>
+UC9 ..> UC13 : <<include>>
+UC7 ..> UC12 : <<include>>
+UC8 ..> UC14 : <<include>>
+
+UC4 --> PSP
+UC12 --> PSP
+UC14 --> PSP
+UC11 --> Logistics
+UC6 --> Logistics
+NOTIFY --> Messaging
+UC9 --> Messaging
+
+note bottom of UC12
+  Выплата после подтверждения доставки
+  с резервом на возвраты (C-09)
+end note
+note bottom of UC1
+  Согласие подтверждаемо (POPIA, NDPA);
+  купленная база не используется (C-08)
+end note
+@enduml
