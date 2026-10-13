@@ -1,5 +1,5 @@
 @startuml transition-architecture
-title Africa Delivery - Transition Architecture: сейчас → MVP → 12 месяцев
+title Africa Delivery - Transition Architecture: сейчас -> MVP -> 6 месяцев -> 12 месяцев
 skinparam defaultFontName Arial
 skinparam rectangle {
   RoundCorner 6
@@ -24,30 +24,43 @@ rectangle "СЕЙЧАС (август 2026)" as now {
 }
 
 rectangle "MVP (15.10.2026)" as mvp {
-  rectangle "Шаблон ячейки v1 (NG, KE):\nCertified K8s · ArgoCD · Vault ·\nCloudNativePG · MinIO · Valkey · OTel" <<new>> as m1
+  rectangle "Шаблон ячейки v1 (NG, KE) у локальных провайдеров:\nCertified K8s · ArgoCD · Vault ·\nCloudNativePG · MinIO · Valkey · OTel" <<new>> as m1
   rectangle "Модульный монолит (Go), 1 бинарник,\n2 deployment: catalog-read | checkout\nмодули: catalog, order, payment, payout,\ndelivery, notification, seller, consent, identity" <<new>> as m2
-  rectangle "Порты-адаптеры: payment (Daraja, Flutterwave,\nPaystack) · delivery (Sendbox, Sendy) ·\nnotification (BSP, SMS, FCM)" <<new>> as m3
+  rectangle "Порты-адаптеры: payment (Daraja, Flutterwave,\nPaystack) · delivery (Sendbox, Sendy) ·\nnotification (BSP, SMS, FCM) · payout (выгрузка)" <<new>> as m3
   rectangle "Outbox + NATS JetStream (события)" <<new>> as m4
   rectangle "Глобальный слой без ПДн (AWS):\nS3 изображений, агрегаты, Grafana" <<new>> as m5
 }
 
-rectangle "12 МЕСЯЦЕВ (август 2027)" as y1 {
-  rectangle "Шаблон ячейки v2 ×5 (NG, KE, ZA, GH, CI)\n+ warm standby NG/KE (99,95 %)" <<new>> as y1a
-  rectangle "Тот же монолит; модули добавлены:\nb2b, seller-insights, returns, ussd-order" <<same>> as y1b
+rectangle "6 МЕСЯЦЕВ (15.02.2027)" as m6 {
+  rectangle "Ячейка ZA в AWS af-south-1:\nтот же шаблон, профиль managed\n(EKS, RDS, S3) - проверка переносимости" <<new>> as s1
+  rectangle "Тот же монолит; новые модули:\nussd-status, seller-onboarding (WhatsApp),\npickup (ПВЗ), reviews, referral,\nseller-insights v1; поиск + суахили" <<same>> as s2
+  rectangle "Новые адаптеры за теми же портами:\nавтовыплаты (M-Pesa B2C, Transfers),\nPaystack/Flutterwave ZA, курьер ZA, USSD-код" <<ext>> as s3
+  rectangle "NATS: новые подписчики\n(выплаты, отзывы, рефералы)" <<same>> as s4
+  rectangle "Флаги политики по заключению юриста;\n99,9 %, учения DR; 8 человек; ≈ $6 500/мес" <<same>> as s5
+}
+
+rectangle "12 МЕСЯЦЕВ (15.08.2027)" as y1 {
+  rectangle "Шаблон ячейки ×5 (NG, KE, ZA, GH, CI)\n+ warm standby NG/KE (99,95 %)" <<new>> as y1a
+  rectangle "Тот же монолит; модули добавлены:\nb2b, returns, track-trace, ussd-order" <<same>> as y1b
   rectangle "Вынесен 1-й сервис: search + OpenSearch\n(триггер ADR-002: 5 языков). Остальное -\nв монолите: MAU < 1,5 млн (триггер ADR-001)" <<new>> as y1c
-  rectangle "Новые адаптеры за теми же портами:\nKYC (Smile ID), BNPL-партнёр, ML-антифрод" <<ext>> as y1d
+  rectangle "Новые адаптеры за теми же портами:\nKYC (Smile ID), BNPL-партнёр, ML-антифрод,\nPSP GH/CI" <<ext>> as y1d
   rectangle "Брокер с Kafka API - только если\n> 500 событий/с (иначе NATS)" <<same>> as y1e
-  rectangle "Экспорт псевдонимизированных данных -\nвыключатель политики после юриста (ADR-003)" <<same>> as y1f
 }
 
 n1 --> m2 : ADR-001
 n2 --> m3 : Partner (ADR-004)
-m1 --> y1a : тот же шаблон,\nновая страна = конфигурация
-m2 --> y1b : добавление модулей,\nне переписывание
-m2 --> y1c : вынос по границе модуля\n(интерфейс + события уже есть)
-m3 --> y1d : новый адаптер за портом
-m4 --> y1e : смена транспорта событий\n(контракт событий не меняется)
-m5 --> y1f : политика как код
+
+m1 --> s1 : новая страна = профиль\nшаблона, не код
+m2 --> s2 : добавление модулей\nна существующих событиях
+m3 --> s3 : новые адаптеры за портом,\nфича-флаг выплат
+m4 --> s4 : новые потребители
+m5 --> s5 : политика как код
+
+s1 --> y1a : тот же шаблон,\n+ профиль standby
+s2 --> y1b : добавление модулей,\nне переписывание
+s2 --> y1c : вынос по границе модуля\n(интерфейс + события уже есть)
+s3 --> y1d : новый адаптер за портом
+s4 --> y1e : смена транспорта событий\n(контракт событий не меняется)
 
 legend right
   |<#E3F4EA>| создаётся на этом шаге |
