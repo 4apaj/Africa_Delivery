@@ -12,7 +12,7 @@
 
 ## Реестр ADR
 
-Все ADR оформляются по единому шаблону [adr-template.md](adr-template.md), нумерация сквозная. Каждое решение ссылается на противоречие C-xx из [Task1/contradictions.md](Task1/contradictions.md).
+Все ADR оформляются по единому шаблону  нумерация сквозная. Каждое решение ссылается на противоречие C-xx из [Task1/contradictions.md](Task1/contradictions.md).
 
 | ADR | Решение | Статус | Противоречия |
 |-|-|-|-|
